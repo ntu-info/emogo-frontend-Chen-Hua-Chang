@@ -10,9 +10,10 @@ Notifications.setNotificationHandler({
 });
 
 export async function initializeNotifications() {
-    console.log("Init called");
+    // 舊函數保留空殼，防止報錯
 }
 
+// 輔助函數：延遲等待
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function scheduleDailyReminders(times) { 
@@ -39,12 +40,11 @@ export async function scheduleDailyReminders(times) {
       });
     }
 
-    // 3. 清除舊通知
+    // 3. 清除舊通知並等待
     await Notifications.cancelAllScheduledNotificationsAsync();
-    await delay(1000); // 等待清除
+    await delay(1000); 
 
     const now = new Date();
-    let debugMsg = "排程計畫：\n"; // 收集除錯訊息
 
     // 4. 開始排程
     for (let i = 0; i < times.length; i++) {
@@ -55,32 +55,28 @@ export async function scheduleDailyReminders(times) {
       const hour = parseInt(hourStr, 10);
       const minute = parseInt(minuteStr, 10);
 
-      // --- 步驟 A: 找出「下一個」正確的時間點 ---
+      // --- 步驟 A: 找出目標時間 ---
       let targetDate = new Date();
-      targetDate.setHours(hour, minute, 0, 0); // 先設為今天
+      targetDate.setHours(hour, minute, 0, 0); // 設為今天
 
-      // 如果今天這個時間已經過了，就改成明天
-      // (例如現在 17:00，設定 08:00 -> 改成明天 08:00)
+      // 如果今天這個時間已經過了 (比現在早)，就改成明天
       if (targetDate <= now) {
           targetDate.setDate(targetDate.getDate() + 1);
-          debugMsg += `時段${i+1}: 已過，設為明天\n`;
-      } else {
-          debugMsg += `時段${i+1}: 尚未過，設為今天\n`;
       }
 
       // --- 步驟 B: 計算秒數差 ---
       const diffInMs = targetDate.getTime() - now.getTime();
-      const diffInSeconds = Math.floor(diffInMs / 1000);
+      let diffInSeconds = Math.floor(diffInMs / 1000);
 
-      // 再次防呆：如果秒數小於 10 秒，可能是誤判，直接跳過
-      if (diffInSeconds < 10) {
-          debugMsg += `-> 略過 (秒數過短: ${diffInSeconds}s)\n`;
-          continue;
+      // --- 步驟 C: 處理極短秒數 (您的需求) ---
+      // 原本邏輯：小於 10 秒就跳過 (造成您圖中 4s 被略過的情況)
+      // 新邏輯：如果秒數在 0~10 秒之間，直接強制設為 2 秒後觸發
+      // 這樣保證「無論多近都會響」，且秒數合法
+      if (diffInSeconds <= 1) {
+          diffInSeconds = 2; // 強制至少給系統 2 秒緩衝
       }
 
-      debugMsg += `-> 倒數: ${diffInSeconds} 秒後觸發\n`;
-
-      // --- 步驟 C: 使用「秒數」排程 (最安全的做法) ---
+      // --- 步驟 D: 使用「秒數」排程 ---
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "心情紀錄時間到了！📝",
@@ -89,24 +85,20 @@ export async function scheduleDailyReminders(times) {
           color: '#FF231F7C',
         },
         trigger: {
-          type: 'timeInterval', // 明確指定類型
+          type: 'timeInterval', 
           seconds: diffInSeconds, 
           channelId: 'default',
-          repeats: false, // 一次性倒數，絕對不重複
+          repeats: false, 
         },
       });
     }
 
-    console.log(debugMsg);
-    
-    // 【關鍵】跳出彈窗讓您確認邏輯是否正確
-    Alert.alert("排程除錯資訊", debugMsg);
-
+    console.log("排程完成");
+    // 除錯彈窗已移除
     return true;
 
   } catch (error) {
     console.error("設定失敗:", error);
-    Alert.alert("錯誤", "設定通知時發生錯誤: " + error.message);
     return false;
   }
 }
