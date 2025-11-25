@@ -1,35 +1,49 @@
+// app/(tabs)/_layout.js
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
+// 【修改引入路徑】引入剛剛建立的按鈕
+import ThemeToggle from '../../backgroundmode/switchbutton'; 
+import { useTheme } from '../../backgroundmode/theme';
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
+
   return (
-    <Tabs>
-      {/* Tab 1: 首頁 (app/(tabs)/index.js) */}
+    <Tabs
+      screenOptions={{
+        // --- 外觀設定 ---
+        tabBarStyle: { backgroundColor: colors.tabBar },
+        tabBarActiveTintColor: colors.tabIconSelected,
+        tabBarInactiveTintColor: colors.tabIconDefault,
+        
+        // --- Header (標題列) 設定 ---
+        headerShown: true, // 【關鍵】開啟標題列，這會自動解決頁面太擠的問題
+        headerStyle: { backgroundColor: colors.background }, // 標題列背景跟隨主題
+        headerTintColor: colors.text, // 標題文字跟隨主題
+        headerTitleAlign: 'center', // 標題置中
+        
+        // --- 右上角按鈕 (所有 Tab 頁面都會有) ---
+        headerRight: () => <ThemeToggle />,
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: '首頁',
-          headerShown: false, // 讓首頁內容自己控制標題
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="home-outline" size={24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} />,
         }}
       />
       
-      {/* Tab 2: 設定時間 (app/(tabs)/time.js) */}
       <Tabs.Screen
         name="time"
         options={{
-          title: '時間設定',
-          headerShown: false, // 讓時間設定頁面自己控制標題
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="time-outline" size={24} color={color} />
-          ),
+          title: '每日提醒設定',
+          tabBarIcon: ({ color }) => <Ionicons name="time-outline" size={24} color={color} />,
         }}
       />
       
-      {/* 隱藏其他頁面 (例如 records 是給按鈕跳轉的，不應該有 Tab) */}
+      {/* Records 雖然在這裡，但我們通常隱藏它，或讓它不顯示 Tab */}
       <Tabs.Screen name="records" options={{ href: null }} />
     </Tabs>
   );

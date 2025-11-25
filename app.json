@@ -5,6 +5,15 @@
     "plugins": [
       "expo-router",
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7383df5b-4a7e-479b-a207-d3e8da0431f2"
+      }
+    },
+    "android": {
+      "package": "com.chenhuachang.exporoutermwe"
+    }
   }
 }

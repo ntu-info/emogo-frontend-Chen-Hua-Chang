@@ -3,14 +3,11 @@ import { View, Text, StyleSheet, Button, Alert, ScrollView, Platform, ActivityIn
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 
-// 1. 引入資料儲存邏輯
+// 引入資料儲存與通知邏輯
 import { saveTimeSettings, canEditSettings, loadTimeSettings } from '../../savedata/settingsStorage'; 
-// 2. 引入單一通知排程函數 (名稱已修正為 scheduleDailyReminders)
 import { scheduleDailyReminders } from '../../savedata/reminder'; 
-
-// ====================================================
-// 畫面元件開始
-// ====================================================
+// 引入主題 Hook
+import { useTheme } from '../../backgroundmode/theme';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
 const MINUTES = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
@@ -22,6 +19,8 @@ const timeToMinutes = (hour, minute) => {
 const SIX_HOURS_IN_MINUTES = 6 * 60;
 
 export default function TimeScreen() {
+  const { colors } = useTheme(); // 取得動態顏色
+  
   const [time1Hour, setTime1Hour] = useState("08");
   const [time1Minute, setTime1Minute] = useState("00");
   const [time2Hour, setTime2Hour] = useState("14");
@@ -30,17 +29,15 @@ export default function TimeScreen() {
   const [time3Minute, setTime3Minute] = useState("00");
   
   const [isLocked, setIsLocked] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // 保留載入狀態
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     const checkLockStatus = async () => {
       setIsLoading(true);
-      
       const canEdit = await canEditSettings();
       setIsLocked(!canEdit); 
 
-      // 載入已儲存的時間
       const { time1, time2, time3 } = await loadTimeSettings();
       if (time1) {
         setTime1Hour(time1.split(':')[0]);
@@ -57,7 +54,6 @@ export default function TimeScreen() {
       
       setIsLoading(false);
     };
-    
     checkLockStatus();
   }, []);
 
@@ -66,7 +62,6 @@ export default function TimeScreen() {
     const t2_minutes = timeToMinutes(time2Hour, time2Minute);
     const t3_minutes = timeToMinutes(time3Hour, time3Minute);
 
-    // 檢查間隔 6 小時
     if (t2_minutes - t1_minutes < SIX_HOURS_IN_MINUTES) {
       Alert.alert("時間間隔不足", "「第二次」的時間必須在「第一次」的 6 小時之後。");
       return;
@@ -88,13 +83,9 @@ export default function TimeScreen() {
         { 
           text: "確定", 
           onPress: async () => { 
-            // 儲存設定 (包含今日日期鎖定)
             await saveTimeSettings(time1, time2, time3);
-            
-            // 設定通知鬧鐘
             const timesArray = [time1, time2, time3];
-            await scheduleDailyReminders(timesArray); // <-- 這裡呼叫修正後的函數
-            
+            await scheduleDailyReminders(timesArray);
             console.log("已確認設定並排程通知！");
             setIsLocked(true); 
             router.push('/(tabs)');
@@ -106,50 +97,88 @@ export default function TimeScreen() {
 
   const renderTimePicker = (label, hourVal, setHourVal, minuteVal, setMinuteVal) => (
     <View style={styles.pickerContainer}>
-      <Text style={styles.pickerLabel}>{label}</Text>
+      {/* 標籤文字變色 */}
+      <Text style={[styles.pickerLabel, { color: colors.text }]}>{label}</Text>
+      
       <View style={styles.wheelContainer}>
-        <Picker
-          style={styles.wheel}
-          itemStyle={styles.wheelItem}
-          selectedValue={hourVal}
-          onValueChange={(itemValue) => setHourVal(itemValue)}
-          enabled={!isLocked} 
-        >
-          {HOURS.map((hour) => (
-            <Picker.Item key={hour} label={hour} value={hour} />
-          ))}
-        </Picker>
-        <Text style={styles.colon}>:</Text>
-        <Picker
-          style={styles.wheel}
-          itemStyle={styles.wheelItem}
-          selectedValue={minuteVal}
-          onValueChange={(itemValue) => setMinuteVal(itemValue)}
-          enabled={!isLocked}
-        >
-          {MINUTES.map((minute) => (
-            <Picker.Item key={minute} label={minute} value={minute} />
-          ))}
-        </Picker>
+        {/* 小時選擇器 */}
+        <View style={[
+          styles.pickerWrapper, 
+          { backgroundColor: colors.inputBackground, borderColor: colors.border } // 動態背景
+        ]}>
+          <Picker
+            style={[
+              styles.pickerStyle, 
+              { backgroundColor: colors.inputBackground, color: colors.inputText } // 修正 Android 顏色
+            ]}
+            itemStyle={[styles.wheelItem, { color: colors.text }]} // iOS 文字顏色
+            selectedValue={hourVal}
+            onValueChange={(itemValue) => setHourVal(itemValue)}
+            enabled={!isLocked}
+            dropdownIconColor={colors.inputText} // 修正 Android 下拉箭頭顏色
+            mode="dropdown"
+          >
+            {HOURS.map((hour) => (
+              <Picker.Item 
+                key={hour} 
+                label={hour} 
+                value={hour} 
+                color={colors.inputText} // 修正 Android 選項顏色
+                style={{ backgroundColor: colors.inputBackground }} // 修正 Android 選項背景
+              />
+            ))}
+          </Picker>
+        </View>
+        
+        <Text style={[styles.colon, { color: colors.text }]}>:</Text>
+        
+        {/* 分鐘選擇器 */}
+        <View style={[
+          styles.pickerWrapper, 
+          { backgroundColor: colors.inputBackground, borderColor: colors.border }
+        ]}>
+          <Picker
+            style={[
+              styles.pickerStyle, 
+              { backgroundColor: colors.inputBackground, color: colors.inputText }
+            ]}
+            itemStyle={[styles.wheelItem, { color: colors.text }]}
+            selectedValue={minuteVal}
+            onValueChange={(itemValue) => setMinuteVal(itemValue)}
+            enabled={!isLocked}
+            dropdownIconColor={colors.inputText}
+            mode="dropdown"
+          >
+            {MINUTES.map((minute) => (
+              <Picker.Item 
+                key={minute} 
+                label={minute} 
+                value={minute} 
+                color={colors.inputText}
+                style={{ backgroundColor: colors.inputBackground }}
+              />
+            ))}
+          </Picker>
+        </View>
       </View>
     </View>
   );
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10 }}>載入設定中...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ marginTop: 10, color: colors.text }}>載入設定中...</Text>
       </View>
     )
   }
 
   return (
     <ScrollView 
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]} // 動態背景
       contentContainerStyle={styles.scrollContainer}
     >
-      <Text style={styles.title}>設定每日紀錄時間</Text>
+      <Text style={[styles.title, { color: colors.text }]}>設定每日紀錄時間</Text>
       
       {isLocked && (
         <Text style={styles.lockedText}>
@@ -170,6 +199,7 @@ export default function TimeScreen() {
           title={isLocked ? "今日已設定完成" : "設定完成"} 
           onPress={handleSaveSettings} 
           disabled={isLocked}
+          color={colors.primary}
         />
       </View>
     </ScrollView>
@@ -179,7 +209,7 @@ export default function TimeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    // backgroundColor: '#fff', // 移除寫死的背景
   },
   scrollContainer: {
     alignItems: 'center',
@@ -200,26 +230,32 @@ const styles = StyleSheet.create({
   },
   pickerContainer: {
     width: '100%',
-    marginBottom: 0,
+    marginBottom: 10,
     alignItems: 'center',
   },
   pickerLabel: {
     fontSize: 18,
     fontWeight: '500',
-    marginBottom: 0,
-    color: '#333'
+    marginBottom: 5,
   },
   wheelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: Platform.OS === 'android' ? '60%' : '80%',
-    height: 120,
+    width: '90%', 
+    marginBottom: 10,
+  },
+  pickerWrapper: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    // borderColor: '#ddd', // 移除寫死的邊框色
+    marginHorizontal: 5,
     overflow: 'hidden',
   },
-  wheel: {
-    flex: 1,
-    height: 120,
+  pickerStyle: {
+    width: '100%',
+    height: 50, 
   },
   wheelItem: {
     fontSize: 26,
@@ -228,8 +264,7 @@ const styles = StyleSheet.create({
   colon: {
     fontSize: 26,
     fontWeight: 'bold',
-    marginHorizontal: 10,
-    transform: [{ translateY: Platform.OS === 'android' ? -15 : 0 }]
+    marginHorizontal: 5,
   },
   instructions: {
     fontSize: 14,
@@ -242,14 +277,16 @@ const styles = StyleSheet.create({
     width: '80%',
   },
   lockedText: {
-    fontSize: 16,
+    fontSize: 14,       // 【修改】從 16 改為 14，確保一行塞得下
     color: 'red',
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 20,
-    padding: 10,
+    paddingVertical: 10,   // 【修改】維持垂直高度舒適
+    paddingHorizontal: 5,  // 【修改】減少左右留白，讓文字有更多空間
     borderWidth: 1,
     borderColor: 'red',
     borderRadius: 5,
+    width: '100%',         // 【新增】確保寬度撐滿容器
   }
 });
