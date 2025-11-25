@@ -1,7 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Alert, Platform } from 'react-native';
 
-// 設定通知的行為：即使 App 在前景 (打開著)，也要跳出通知
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -14,15 +13,11 @@ export async function initializeNotifications() {
     console.log("[Reminder] initializeNotifications 舊函數被呼叫。");
 }
 
-/**
- * 【倒數計時排程版】
- * 解決 Android 亂跳通知的最終手段：
- * 不給日期 (Date)，改給「秒數 (Seconds)」。
- * 系統只需要知道「還有幾秒」，就不會誤判為過去或現在。
- */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export async function scheduleDailyReminders(times) { 
   try {
-    // A. 請求權限
+    // 1. 權限檢查
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     
@@ -36,7 +31,7 @@ export async function scheduleDailyReminders(times) {
       return false;
     }
 
-    // Android 頻道設定
+    // 2. Android 頻道設定
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: '心情紀錄提醒', 
@@ -46,16 +41,16 @@ export async function scheduleDailyReminders(times) {
       });
     }
 
-    console.log("[Reminder] 清除舊通知，準備開始倒數計時排程...");
-    
-    // B. 取消舊的排程 (重要！先清空那 41 個)
+    console.log("[Reminder] 清除舊通知...");
     await Notifications.cancelAllScheduledNotificationsAsync();
+    await delay(1000); // 等待清除完成
 
-    // C. 開始排程
-    const now = new Date(); // 取得現在時間 (基準點)
-    const nowTime = now.getTime(); // 轉成毫秒數字，方便計算
+    const now = new Date();
+    
+    // 【策略調整】手動排程未來 14 天，但使用「精確日曆 (Year/Month/Day)」
+    // 這種寫法是 Android 最能精準識別的，不會有秒數誤判或補償過去的問題
+    const DAYS_TO_SCHEDULE = 14; 
 
-    // 外層迴圈：遍歷 3 個時段
     for (let i = 0; i < times.length; i++) {
       const timeStr = times[i];
       if (!timeStr) continue;
@@ -64,30 +59,22 @@ export async function scheduleDailyReminders(times) {
       const hour = parseInt(hourStr, 10);
       const minute = parseInt(minuteStr, 10);
 
-      // 內層迴圈：手動排程未來 14 天
-      // 雖然 Android 上限通常是 50 個，但 3x14=42 安全過關
-      for (let day = 0; day < 14; day++) {
+      for (let day = 0; day < DAYS_TO_SCHEDULE; day++) {
         
-        // 1. 建立目標時間點
+        // 1. 計算出未來的某一天
         let targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() + day); // 今天 + day 天
-        targetDate.setHours(hour, minute, 0, 0);        // 設定時分
+        targetDate.setDate(targetDate.getDate() + day);
+        targetDate.setHours(hour, minute, 0, 0);
 
-        const targetTime = targetDate.getTime();
-
-        // 2. 計算「目標時間」與「現在」的毫秒差
-        const diffInMs = targetTime - nowTime;
-
-        // 3. 如果是過去的時間 (差值為負)，直接跳過
-        if (diffInMs <= 0) {
-          continue; 
+        // 2. 如果時間已過，直接跳過 (連設定都不設定)
+        if (targetDate <= now) {
+            continue; 
         }
 
-        // 4. 將毫秒轉為秒 (Expo 需要秒)
-        const diffInSeconds = Math.floor(diffInMs / 1000);
+        console.log(`[Reminder] 排程: ${targetDate.getFullYear()}/${targetDate.getMonth()+1}/${targetDate.getDate()} ${hour}:${minute}`);
 
-        // 5. 使用「倒數計時」排程
-        // 這是最單純的指令：「X 秒後叫我」。系統不會有任何誤解。
+        // 3. 使用 CalendarTrigger 但指定「年、月、日」
+        // 這會建立一個「一次性」的精準鬧鐘，絕對不會亂跳
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "心情紀錄時間到了！📝",
@@ -96,15 +83,19 @@ export async function scheduleDailyReminders(times) {
             color: '#FF231F7C',
           },
           trigger: {
-            seconds: diffInSeconds, // 【重點】只給秒數
+            year: targetDate.getFullYear(),
+            month: targetDate.getMonth() + 1, // 注意：Expo 的月份是 1-12，JS 是 0-11
+            day: targetDate.getDate(),
+            hour: hour,
+            minute: minute,
             channelId: 'default',
-            // 不要寫 repeats: true，因為這是一次性倒數
+            repeats: false, // 因為我們指定了年月日，這就是一次性的
           },
         });
       }
     }
     
-    console.log("排程完成。");
+    console.log("[Reminder] 精確日曆排程完成。");
     return true;
 
   } catch (error) {
