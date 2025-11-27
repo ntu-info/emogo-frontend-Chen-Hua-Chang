@@ -1,1 +1,1 @@
-https://expo.dev/accounts/chenhuachang/projects/expo-router-mwe/builds/4630924a-695b-4dfe-b5ab-2dad8ae53fe8
+https://expo.dev/accounts/chenhuachang/projects/expo-router-mwe/builds/70e57418-1670-4251-9fbd-693778dbfc23
