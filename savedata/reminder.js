@@ -89,7 +89,7 @@ export async function scheduleDailyReminders(times) {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "心情紀錄時間到了！📝",
-            body: `現在是第 ${i + 1} 次紀錄時間，請開始記錄。`,
+            body: `現在是第 ${i + 1} 次紀錄時間，請在 5 分鐘內開始記錄。`,
             sound: true,
             color: '#FF231F7C',
           },
