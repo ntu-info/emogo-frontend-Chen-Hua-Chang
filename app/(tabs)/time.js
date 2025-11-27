@@ -77,7 +77,7 @@ export default function TimeScreen() {
     
     Alert.alert(
       "確認設定？",
-      `您設定的時間為：\n${time1}, ${time2}, ${time3}\n\n此設定將「立即生效」，並為您設定每日提醒通知。`,
+      `您設定的時間為：\n${time1}, ${time2}, ${time3}\n\n此設定將「立即生效」，並為您設定每日提醒通知。\n\n⚠️ 請注意若在設定時間到達後逾 5 分鐘未開始紀錄，則該時段視為錯過並無法紀錄。`,
       [
         { text: "取消", style: "cancel" },
         { 
