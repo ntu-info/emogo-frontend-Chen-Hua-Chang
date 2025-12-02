@@ -1,37 +1,44 @@
-import * as SQLite from 'expo-sqlite';
+// savedata/scaledata.js
+import { Alert } from 'react-native';
 
-// 使用 Sync 方法開啟資料庫 (確保所有 DB 檔案都使用同一個連接)
-const db = SQLite.openDatabaseSync('emotional_log.db');
+const BACKEND_URL = "https://emogo-backend-chen-hua-chang.onrender.com";
 
 export const initScaleDB = async () => {
-  try {
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS mood_scales (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mood_score INTEGER NOT NULL,
-        active_slot TEXT,
-        gps_id INTEGER, 
-        timestamp TEXT
-      );
-    `);
-    console.log('[ScaleData] 資料表 mood_scales 初始化成功');
-  } catch (error) {
-    console.log('[ScaleData] 資料表建立失敗: ', error);
-  }
+  console.log('[ScaleData] 雲端模式：無需初始化本地資料庫');
 };
 
 export const storeScaleData = async (score, slot, gpsId) => {
   try {
     const timestamp = new Date().toISOString();
-    const result = await db.runAsync(
-      'INSERT INTO mood_scales (mood_score, active_slot, gps_id, timestamp) VALUES (?, ?, ?, ?)',
-      [score, slot, gpsId, timestamp]
-    );
     
-    console.log('[ScaleData] 量表資料儲存成功, ID:', result.lastInsertRowId);
-    return result.lastInsertRowId;
+    const payload = {
+      score: score,
+      slot: slot,
+      gps_id: gpsId, // 這是剛剛 gpsdata 回傳的雲端 ID
+      timestamp: timestamp
+    };
+
+    console.log('[ScaleData] 準備上傳心情:', payload);
+
+    const response = await fetch(`${BACKEND_URL}/upload/sentiment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log('[ScaleData] 上傳成功，ID:', result.id);
+      return result.id;
+    } else {
+      throw new Error(result.detail || '上傳失敗');
+    }
+
   } catch (error) {
-    console.log('[ScaleData] 量表資料儲存失敗:', error);
+    console.error('[ScaleData] 上傳失敗:', error);
     throw error;
   }
 };

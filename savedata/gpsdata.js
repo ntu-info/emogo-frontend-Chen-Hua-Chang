@@ -1,39 +1,50 @@
 // savedata/gpsdata.js
-import * as SQLite from 'expo-sqlite';
+import { Alert } from 'react-native';
 
-// 使用 Sync 方法開啟資料庫 (Expo SDK 50+ 適用)
-const db = SQLite.openDatabaseSync('emotional_log.db');
+// 【設定】您的後端網址 (末尾不需加斜線)
+const BACKEND_URL = "https://emogo-backend-chen-hua-chang.onrender.com";
 
+// 初始化函數 (現在不需要建表了，留空即可)
 export const initGpsDB = async () => {
-  try {
-    // 新版寫法：使用 execAsync 執行 SQL 指令
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS gps_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        latitude REAL,
-        longitude REAL,
-        timestamp TEXT
-      );
-    `);
-    console.log('[GpsData] 資料表 gps_logs 初始化成功');
-  } catch (error) {
-    console.log('[GpsData] 資料表建立失敗: ', error);
-  }
+  console.log('[GpsData] 雲端模式：無需初始化本地資料庫');
 };
 
 export const storeGpsData = async (lat, lng) => {
   try {
     const timestamp = new Date().toISOString();
-    // 新版寫法：使用 runAsync 執行插入，並直接取得結果
-    const result = await db.runAsync(
-      'INSERT INTO gps_logs (latitude, longitude, timestamp) VALUES (?, ?, ?)',
-      [lat, lng, timestamp]
-    );
     
-    console.log('[GpsData] GPS 資料儲存成功, ID:', result.lastInsertRowId);
-    return result.lastInsertRowId; // 回傳 ID
+    // 1. 準備要傳送的資料包裹
+    const payload = {
+      latitude: lat,
+      longitude: lng,
+      timestamp: timestamp
+    };
+
+    console.log('[GpsData] 準備上傳 GPS:', payload);
+
+    // 2. 發送 POST 請求到後端
+    const response = await fetch(`${BACKEND_URL}/upload/gps`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    // 3. 檢查回應
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log('[GpsData] 上傳成功，ID:', result.id);
+      // 回傳後端給的 ID，讓其他模組 (scaledata) 可以關聯
+      return result.id; 
+    } else {
+      throw new Error(result.detail || '上傳失敗');
+    }
+
   } catch (error) {
-    console.log('[GpsData] GPS 資料儲存失敗:', error);
+    console.error('[GpsData] 上傳失敗:', error);
+    // 為了不讓流程中斷，這裡雖然報錯，但我們還是可以拋出錯誤讓 UI 層知道
     throw error;
   }
 };

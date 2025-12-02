@@ -3,10 +3,8 @@ import { View, Text, Button, StyleSheet } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router"; 
 import { fetchCurrentLocation } from '../../savedata/gps.js';
 import { loadTimeSettings, loadRecordingStatus } from '../../savedata/settingsStorage.js';
-// 雖然不放按鈕了，但我們還是需要 colors 來讓背景跟文字變色，所以 useTheme 還是要留著
 import { useTheme } from '../../backgroundmode/theme'; 
 
-// 輔助函數：將 "08:00" 這樣的字串轉為今天的 Date 物件
 const parseTime = (timeString) => {
   if (!timeString) return null;
   const [hours, minutes] = timeString.split(':');
@@ -19,7 +17,6 @@ const FIVE_MIN_MS = 5 * 60 * 1000;
 
 export default function HomeScreen() {
   const router = useRouter(); 
-  // 這裡只取出 colors，不需要 toggleTheme 了
   const { colors } = useTheme(); 
 
   const [buttonState, setButtonState] = useState({
@@ -150,32 +147,17 @@ export default function HomeScreen() {
   };
 
   return (
-    // 套用動態背景色
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 因為我們在 TabsLayout 已經開啟了 Header (headerShown: true)，
-         這行 "首頁" 標題其實可以考慮拿掉，因為上方已經有 "首頁" 兩個字了。
-         不過如果您想保留大標題，這行就留著，顏色會自動跟隨主題。
-      */}
       <Text style={[styles.title, { color: colors.text }]}>首頁</Text>
 
       <Button 
         title={buttonState.text}
         onPress={handleButtonPress} 
         disabled={buttonState.disabled}
-        color={colors.primary} // 讓按鈕也跟隨主題色 (可選)
+        color={colors.primary} 
       />
       
-      <View style={{ marginTop: 40, width: '80%' }}>
-        <Button 
-          title="查看收集到的資料 (除錯用)" 
-          onPress={() => router.push('/records')} 
-          color="#888"
-        />
-      </View>
-
-      {/* 已移除「切換至深色模式」按鈕 
-         現在使用者可以透過右上角的圖示來切換
-      */}
+      {/* 這裡原本的除錯按鈕已移除 */}
 
     </View>
   );
