@@ -4,7 +4,15 @@
     "slug": "expo-router-mwe",
     "plugins": [
       "expo-router",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允許應用程式存取相機以錄製影片。",
+          "microphonePermission": "允許應用程式存取麥克風以錄製聲音。",
+          "recordAudioAndroid": true
+        }
+      ]
     ],
     "extra": {
       "router": {},
@@ -18,8 +26,16 @@
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.VIBRATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "我們需要使用您的相機來錄製心情 Vlog。",
+        "NSMicrophoneUsageDescription": "我們需要使用您的麥克風來錄製 Vlog 的聲音。"
+      }
     }
   }
 }

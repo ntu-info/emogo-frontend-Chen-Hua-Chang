@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, StyleSheet, 
-  TouchableOpacity, Dimensions, 
-  Button, Alert, ActivityIndicator // 1. 引入讀取圈圈
+  View, Text, StyleSheet, TouchableOpacity, Dimensions, Button, Alert, ActivityIndicator 
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router'; 
-
-import { initScaleDB, storeScaleData } from '../savedata/scaledata';
-import { initGpsDB, storeGpsData } from '../savedata/gpsdata';
+import { fetchCurrentLocation } from '../savedata/gps.js'; // 只需要抓位置工具
 import { useTheme } from '../backgroundmode/theme';
 
 const screenWidth = Dimensions.get('window').width;
@@ -20,21 +16,14 @@ const MOODS = [
 
 export default function ScaleScreen() {
   const [selectedMood, setSelectedMood] = useState(null); 
+  // 增加一個取得位置中的狀態
+  const [isLocating, setIsLocating] = useState(false);
+
   const router = useRouter(); 
-  const { latitude, longitude, activeSlot } = useLocalSearchParams();
+  const { activeSlot } = useLocalSearchParams();
   const { colors } = useTheme();
 
-  // 2. 新增一個狀態來記錄「是否正在上傳中」
-  const [isUploading, setIsUploading] = useState(false);
-
-  useEffect(() => {
-    initScaleDB();
-    initGpsDB();
-  }, []);
-
   const handleMoodPress = (score) => {
-    // 如果正在上傳，禁止更改心情，避免干擾
-    if (isUploading) return;
     setSelectedMood(score); 
   };
 
@@ -44,37 +33,29 @@ export default function ScaleScreen() {
       return;
     }
 
-    // 3. 防止重複點擊：如果已經在上傳，就直接無視這次點擊
-    if (isUploading) return;
+    setIsLocating(true);
 
-    try {
-      // 4. 開始上傳：鎖住按鈕，顯示轉圈圈
-      setIsUploading(true);
+    // 1. 這裡只負責「取得目前經緯度」，不負責上傳
+    // 抓 GPS 通常很快 (1-2秒)，這是唯一需要稍微等一下的地方
+    const location = await fetchCurrentLocation();
+    
+    setIsLocating(false);
 
-      const lat = latitude ? parseFloat(latitude) : 0;
-      const lng = longitude ? parseFloat(longitude) : 0;
-      
-      // 這裡依然需要 await，因為我們需要 ID
-      // 但現在使用者會看到轉圈圈，知道系統正在運作，就不會亂按了
-      const gpsId = await storeGpsData(lat, lng);
-      const scaleId = await storeScaleData(selectedMood, activeSlot, gpsId);
-      
-      // 上傳成功，跳轉頁面
-      // 這裡不需要把 isUploading 設回 false，因為頁面都要跳轉了
+    if (location) {
+      // 2. 拿到資料後，直接帶著這些資料跳轉到 Vlog 頁面
+      // 我們不存資料庫，把責任往後傳
       router.push({
         pathname: '/vlog', 
         params: { 
           mood: selectedMood,
           activeSlot: activeSlot,
-          scaleId: scaleId 
+          // 把座標傳下去
+          lat: location.latitude,
+          lng: location.longitude
         } 
       });
-
-    } catch (error) {
-      // 只有失敗時才需要把按鈕解鎖，讓使用者重試
-      setIsUploading(false);
-      Alert.alert("錯誤", "資料上傳失敗，請檢查網路連線。");
-      console.error(error);
+    } else {
+      Alert.alert("錯誤", "無法取得位置資訊，請檢查 GPS 設定。");
     }
   };
 
@@ -90,12 +71,10 @@ export default function ScaleScreen() {
               styles.moodButton, 
               { width: buttonSize, height: buttonSize },
               { backgroundColor: selectedMood === mood.score ? '#007AFF' : colors.card },
-              selectedMood === mood.score && styles.selectedMoodButton,
-              // 如果正在上傳，讓按鈕變半透明，視覺上告知不可點
-              isUploading && { opacity: 0.5 }
+              selectedMood === mood.score && styles.selectedMoodButton
             ]}
             onPress={() => handleMoodPress(mood.score)}
-            disabled={isUploading} // 上傳時禁用按鈕
+            disabled={isLocating}
           >
             <Text style={[styles.emoji, { fontSize: emojiSize }]}>{mood.emoji}</Text>
           </TouchableOpacity>
@@ -103,22 +82,19 @@ export default function ScaleScreen() {
       </View>
 
       <View style={styles.vlogButtonContainer}>
-        {/* 5. 根據狀態顯示按鈕或轉圈圈 */}
-        {isUploading ? (
+        {isLocating ? (
           <ActivityIndicator size="large" color={colors.primary} />
         ) : (
           <Button
-            title="開始錄製 Vlog"
+            title="下一步：錄製 Vlog"
             onPress={handleStartVlog}
             color={colors.primary}
           />
         )}
       </View>
-
-      {isUploading && (
-        <Text style={{ marginTop: 10, color: colors.placeholder }}>
-          資料上傳中，請稍候...
-        </Text>
+      
+      {isLocating && (
+        <Text style={{ marginTop: 10, color: colors.placeholder }}>正在定位中...</Text>
       )}
 
       <Text style={[styles.link, { color: colors.placeholder }]}>
@@ -135,6 +111,6 @@ const styles = StyleSheet.create({
   moodButton: { alignItems: 'center', justifyContent: 'center', borderRadius: buttonSize / 2 },
   selectedMoodButton: { transform: [{ scale: 1.1 }] },
   emoji: {},
-  vlogButtonContainer: { marginTop: 60, width: '80%', height: 50, justifyContent: 'center' }, // 固定高度避免轉圈圈時跳動
+  vlogButtonContainer: { marginTop: 60, width: '80%', height: 50, justifyContent: 'center' },
   link: { marginTop: 20, fontSize: 14 },
 });

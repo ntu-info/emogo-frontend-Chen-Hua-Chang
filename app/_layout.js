@@ -1,8 +1,9 @@
 import React from 'react';
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-// 移除 databasecheck 的引入
 import { ThemeProvider, useTheme } from '../backgroundmode/theme';
+// 1. 檢查這裡：有沒有引入？
+import { UploadProvider } from '../context/UploadContext'; 
 
 function ThemedStatusBar() {
   const { isDark } = useTheme();
@@ -10,41 +11,28 @@ function ThemedStatusBar() {
 }
 
 export default function RootLayout() {
-  
-  // 移除 useEffect 和 initializeAllDatabases
-    
   return (
     <ThemeProvider>
-      <ThemedStatusBar />
-      <Stack>
-        <Stack.Screen
-          name="(tabs)"
-          options={{ headerShown: false }}
-        />
-        
-        <Stack.Screen
-          name="scale"
-          options={{ title: "開始填寫你的情緒" }}
-        />
-        
-        <Stack.Screen
-          name="vlog" 
-          options={{
-            title: "Vlog 錄影", 
-            headerShown: true,
-            headerStyle: { backgroundColor: 'black' },
-            headerTintColor: 'white',
-          }}
-        />
-        
-        {/* 移除 records 頁面的註冊，因為我們不再需要在 App 內看資料了 */}
-        
-        <Stack.Screen
-            name="index"
-            options={{ headerShown: false }}
-        />
-
-      </Stack>
+      {/* 2. 檢查這裡：有沒有包住 Stack？缺了這個就會白屏 */}
+      <UploadProvider>
+        <ThemedStatusBar />
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="scale" options={{ title: "開始填寫你的情緒" }} />
+          
+          <Stack.Screen
+            name="vlog" 
+            options={{
+              title: "Vlog 錄影", 
+              headerShown: true,
+              headerStyle: { backgroundColor: 'black' },
+              headerTintColor: 'white',
+            }}
+          />
+          
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+        </Stack>
+      </UploadProvider>
     </ThemeProvider>
   );
 }
