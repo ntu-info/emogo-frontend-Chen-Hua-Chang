@@ -1,53 +1,90 @@
 // context/UploadContext.js
-import React, { createContext, useState, useContext } from 'react';
-import { Alert, View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
-import { storeGpsData } from '../savedata/gpsdata';
-import { storeScaleData } from '../savedata/scaledata';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import { Alert, View, Text, ActivityIndicator, StyleSheet, AppState } from 'react-native';
+
+// 引入一次性上傳函式
 import { saveVlogVideo } from '../savedata/vlogdata';
 
 const UploadContext = createContext();
 
 export const UploadProvider = ({ children }) => {
-  // 記錄是否正在後台忙碌
   const [isUploading, setIsUploading] = useState(false);
   const [progressText, setProgressText] = useState('');
+  
+  const pendingAlertRef = useRef(null); 
+  const appStateRef = useRef(AppState.currentState);
+
+  // 依然保留監聽邏輯，以防使用者接到電話或不小心跳出
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+        checkPendingAlert();
+      }
+      appStateRef.current = nextAppState;
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const checkPendingAlert = () => {
+    if (pendingAlertRef.current) {
+      const { title, message, buttons } = pendingAlertRef.current;
+      Alert.alert(title, message, buttons);
+      pendingAlertRef.current = null; 
+    }
+  };
+
+  const showAlertSafe = (title, message, buttons) => {
+    if (appStateRef.current === 'active') {
+      Alert.alert(title, message, buttons);
+    } else {
+      console.log("App 在背景，訊息已排入佇列:", title);
+      pendingAlertRef.current = { title, message, buttons };
+    }
+  };
 
   /**
-   * 背景上傳任務
+   * 背景上傳任務 (One-Shot 版本)
    */
   const startBackgroundUpload = async (moodScore, activeSlot, vlogUri, duration, lat, lng) => {
     setIsUploading(true);
-    // 這裡維持你想要的長文字提示
-    setProgressText('紀錄上傳中，可離開讓app在背景跑，但請先不要關閉');
+    
+    // --- 修改重點：更新提示文字，明確引導使用者停留 ---
+    setProgressText('紀錄上傳中，請稍候數秒並先不要離開app');
 
     try {
-      // 1. 上傳 GPS
-      console.log("[Background] 上傳 GPS...");
-      const gpsId = await storeGpsData(lat, lng);
-
-      // 2. 上傳心情
-      console.log("[Background] 上傳心情...");
-      const scaleId = await storeScaleData(moodScore, activeSlot, gpsId);
-
-      // 3. 上傳影片
-      console.log("[Background] 上傳影片...");
-      await saveVlogVideo(vlogUri, scaleId, duration);
+      console.log("[Background] 啟動 One-Shot 上傳...");
+      
+      await saveVlogVideo(
+        vlogUri, 
+        moodScore, 
+        activeSlot, 
+        duration, 
+        lat, 
+        lng
+      );
 
       console.log("[Background] 全部完成！");
       
-      // --- 新增：成功後的確認視窗 ---
-      // 這裡會跳出視窗，等使用者按 OK
-      Alert.alert(
+      // 成功提示
+      showAlertSafe(
         "上傳完成", 
-        "您的紀錄已成功備份！", 
+        "您的紀錄已成功備份！現在可以關閉 App 了。", 
         [{ text: "OK" }]
       );
       
     } catch (error) {
-      console.error("[Background] 上傳失敗:", error);
-      Alert.alert("上傳失敗", "剛才的紀錄上傳失敗，請檢查網路連線。");
+      console.error("[Background] 上傳流程異常:", error);
+      
+      // 錯誤提示
+      showAlertSafe(
+        "資料已保存 (未上傳)", 
+        "紀錄已成功儲存在手機中。\n\n剛才的雲端上傳因故中斷，這不影響資料保存，下次開啟 App 時我們再嘗試補傳。\n\n現在您可以安心關閉 App。",
+        [{ text: "OK" }]
+      );
+
     } finally {
-      // 無論成功或失敗，最後都會把下方黑色進度條關掉
       setIsUploading(false);
       setProgressText('');
     }
@@ -56,15 +93,11 @@ export const UploadProvider = ({ children }) => {
   return (
     <UploadContext.Provider value={{ startBackgroundUpload, isUploading }}>
       {children}
-      
-      {/* 這裡是一個全域的「浮動狀態列」 */}
       {isUploading && (
         <View style={styles.floatingStatus}>
           <ActivityIndicator size="small" color="#fff" />
           <View style={styles.textContainer}>
-            <Text style={styles.statusText}>
-              {progressText}
-            </Text>
+            <Text style={styles.statusText}>{progressText}</Text>
           </View>
         </View>
       )}
@@ -75,36 +108,31 @@ export const UploadProvider = ({ children }) => {
 const styles = StyleSheet.create({
   floatingStatus: {
     position: 'absolute',
-    bottom: 40, // 稍微拉高一點，避開某些手機的 Home Bar
+    bottom: 40, 
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(30, 30, 30, 0.9)', // 顏色加深一點點，更有質感
+    backgroundColor: 'rgba(30, 30, 30, 0.9)', 
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 12, // 圓角稍微小一點，比較俐落
+    borderRadius: 12, 
     flexDirection: 'row',
     alignItems: 'center',
-    // 增加陰影讓它浮起來的感覺更明顯
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
     zIndex: 9999,
   },
-  // 新增一個文字容器來控制排版
   textContainer: {
-    flex: 1, // 關鍵：讓文字區塊佔據剩下的所有空間
-    marginLeft: 12, // 與轉圈圈保持距離
+    flex: 1, 
+    marginLeft: 12, 
   },
   statusText: {
     color: 'white',
     fontSize: 14,
-    lineHeight: 20, // 增加行高，如果換行才不會擠在一起
-    textAlign: 'left', // 靠左對齊，閱讀起來比較舒服
+    lineHeight: 20, 
+    textAlign: 'left', 
   }
 });
 

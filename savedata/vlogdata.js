@@ -1,14 +1,18 @@
 // savedata/vlogdata.js
-import * as FileSystem from 'expo-file-system/legacy';
+
+// --- 修正重點 1: 改用 legacy 引入 ---
+// 新版 Expo 強制要求舊方法 (getInfoAsync, moveAsync 等) 必須從 legacy 引入
+import * as FileSystem from 'expo-file-system/legacy'; 
+
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native'; 
 
 const BACKEND_URL = "https://emogo-backend-chen-hua-chang.onrender.com";
-
-// 雖然不存資料庫，但我們可能還是需要暫存資料夾來處理影片
+// 注意：legacy 模式下，documentDirectory 依然可以使用
 const VIDEO_DIR = FileSystem.documentDirectory + 'vlogs/';
 
 const ensureDirExists = async () => {
+  // 這裡就是報錯的地方，改用 legacy import 後就能正常運作了
   const dirInfo = await FileSystem.getInfoAsync(VIDEO_DIR);
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(VIDEO_DIR, { intermediates: true });
@@ -17,72 +21,71 @@ const ensureDirExists = async () => {
 
 export const initVlogDB = async () => {
   await ensureDirExists();
-  console.log('[VlogData] 雲端模式：已確認暫存資料夾存在');
 };
 
-export const saveVlogVideo = async (tempUri, scaleId, duration) => {
+export const saveVlogVideo = async (tempUri, moodScore, activeSlot, duration, lat, lng) => {
   try {
-    // 1. 雖然不存本地 DB，但我們先把影片搬到 App 專屬目錄比較安全，避免暫存檔被系統清掉
     await ensureDirExists();
     const filename = `vlog_${Date.now()}.mp4`;
     const newPath = VIDEO_DIR + filename;
 
+    // 1. 搬移檔案
     await FileSystem.moveAsync({
       from: tempUri,
       to: newPath,
     });
     console.log('影片已暫存至:', newPath);
 
-    // 2. 準備上傳表單 (FormData)
-    // 注意：React Native 上傳檔案的格式比較特殊
-    const formData = new FormData();
-    
-    formData.append('file', {
-      uri: newPath,
-      name: filename,
-      type: 'video/mp4', // 必須指定型態
-    });
-    formData.append('slot', 'default'); // 這裡可以根據需求修改
-    formData.append('mood', '0'); // 這裡也可以傳遞心情分數，若無則傳預設值
+    console.log('[VlogData] 開始背景上傳 (One-Shot)...');
 
-    // 注意：因為您的 scale.js 呼叫此函數時只傳了 scaleId，
-    // 如果後端需要把影片跟 scaleId 關聯，我們應該要把 scaleId 也傳上去
-    formData.append('scale_id', String(scaleId)); 
-    formData.append('duration', String(duration));
+    // --- 修正重點 2: UploadType 的相容性處理 ---
+    // 在 legacy 模式下，常數名稱可能是 FileSystemUploadType
+    // 為了雙重保險，如果找不到屬性，直接用數字 1 (代表 Multipart)
+    const uploadType = (FileSystem.UploadType && FileSystem.UploadType.MULTIPART) 
+      || (FileSystem.FileSystemUploadType && FileSystem.FileSystemUploadType.MULTIPART) 
+      || 1;
 
-    console.log('[VlogData] 開始上傳影片...');
+    // 2. 背景上傳
+    const response = await FileSystem.uploadAsync(
+      `${BACKEND_URL}/upload/full_record`, 
+      newPath, 
+      {
+        fieldName: 'file',
+        httpMethod: 'POST',
+        uploadType: uploadType, 
+        mimeType: 'video/mp4', 
+        parameters: {
+          'mood_score': String(moodScore),
+          'slot': String(activeSlot),
+          'duration': duration ? String(duration) : "0",
+          'latitude': String(lat),
+          'longitude': String(lng),
+          'timestamp': new Date().toISOString(),
+        },
+      }
+    );
 
-    // 3. 發送 POST 請求 (Multipart/Form-Data)
-    // 這裡 fetch 會自動處理 Content-Type 為 multipart/form-data，不需要手動設定 header
-    const response = await fetch(`${BACKEND_URL}/upload/vlog`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+    console.log('[VlogData] 回應狀態:', response.status);
+    console.log('[VlogData] 回應內容:', response.body); 
 
-    const result = await response.json();
-
-    if (response.ok) {
-      console.log('[VlogData] 影片上傳成功:', result);
-      // 上傳成功後，我們可以選擇刪除本地檔案以節省空間
-      // await FileSystem.deleteAsync(newPath); 
-      return newPath; // 回傳路徑讓 UI 顯示預覽
+    if (response.status >= 200 && response.status < 300) {
+      console.log('[VlogData] 上傳成功!');
+      // 成功後刪除暫存，節省空間
+      await FileSystem.deleteAsync(newPath).catch(e => console.log("刪除暫存失敗(不影響功能):", e));
+      return newPath;
     } else {
-      throw new Error(result.detail || '影片上傳失敗');
+      throw new Error(`伺服器拒絕: ${response.status} - ${response.body}`);
     }
 
   } catch (error) {
-    console.error("上傳影片流程失敗:", error);
-    Alert.alert("上傳失敗", "影片上傳時發生錯誤，請檢查網路。");
+    console.error("上傳失敗細節:", error);
     throw error;
   }
 };
 
 export const shareVlogVideo = async (fileUri) => {
   if (!(await Sharing.isAvailableAsync())) {
-    Alert.alert('錯誤', '您的裝置不支援分享功能');
+    Alert.alert('錯誤', '不支援分享');
     return;
   }
   await Sharing.shareAsync(fileUri);
